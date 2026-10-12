@@ -1,0 +1,25 @@
+{
+  "name": "itho-hru-card",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Home Assistant Lovelace card for Itho Daalderop HRU ventilation units",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "happy-dom": "^21.0.1",
+    "prettier": "^3.9.10",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.4"
+  }
+}
