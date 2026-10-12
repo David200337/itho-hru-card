@@ -40,3 +40,14 @@ npm run build       # dist/itho-hru-card.js
   when behaviour or config changes.
 - When an open question in `docs/roadmap.md` blocks you, stop and ask rather than guessing
   entity attributes or preset names.
+
+## Git commits and signing
+
+- The developer uses GPG-signed commits.
+- Never request, access, export, or modify GPG private keys.
+- Never change global Git signing configuration.
+- Agent-created feature commits may be unsigned.
+- When creating agent commits, use:
+  `git -c commit.gpgsign=false commit -m "..."`
+- Do not push commits or merge pull requests without explicit approval.
+- Do not rewrite signed commits without explicit approval.
