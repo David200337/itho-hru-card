@@ -42,3 +42,14 @@ export function parseActualMode(entity: HassEntity | undefined): ParsedMode {
 export function isControlMode(mode: ModeId): mode is ControlMode {
   return (CONTROL_MODES as readonly string[]).includes(mode);
 }
+
+/** MDI icons per mode; `other` is used for unknown codes and an unavailable sensor. */
+export const MODE_ICONS: Readonly<Record<ModeId | 'other', string>> = {
+  low: 'mdi:fan-speed-1',
+  medium: 'mdi:fan-speed-2',
+  high: 'mdi:fan-speed-3',
+  auto: 'mdi:fan-auto',
+  timer: 'mdi:timer-outline',
+  autonight: 'mdi:weather-night',
+  other: 'mdi:fan-alert',
+};
