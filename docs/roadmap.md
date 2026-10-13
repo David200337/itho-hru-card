@@ -194,9 +194,7 @@ Ideas that are deferred, with the reason:
 
 ## Open questions
 
-1. **Status update interval.** How quickly does `sensor.hru_350_actual_mode` reflect a change? This
-   checks whether the 60 s default timeout is sensible, and should be measured during M6.
-2. **Mode codes for timer presets.** Do `Timer 10min`, `Timer 20min` and `Timer 30min` all report
+1. **Mode codes for timer presets.** Do `Timer 10min`, `Timer 20min` and `Timer 30min` all report
    code 13? This needs to be known for v0.3.
 
 ## Resolved

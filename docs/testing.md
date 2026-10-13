@@ -19,50 +19,38 @@ Record the Home Assistant version, the add-on version and the result below each 
 
 ### Modes
 
-- [ ] Click Low. The status line says "Switching to Low…", then the Low button fills once the mode
+- [x] Click Low. The status line says "Switching to Low…", then the Low button fills once the mode
   sensor reports `1`.
-- [ ] Repeat for Medium (`2`), High (`3`) and Auto (`24`).
-- [ ] Click the pending mode again while waiting. No second `set_preset_mode` call is made.
-- [ ] Set the mode with the physical remote. The card follows without interaction.
-- [ ] Select a mode the card has no button for (for example a timer or AutoNight from the add-on's
+- [x] Repeat for Medium (`2`), High (`3`) and Auto (`24`).
+- [x] Click the pending mode again while waiting. No second `set_preset_mode` call is made.
+- [x] Set the mode with the physical remote. The card follows without interaction.
+- [x] Select a mode the card has no button for (for example a timer or AutoNight from the add-on's
   web UI). No button is filled and the label names the mode or says "Mode N".
 
 ### Failure and availability
 
-- [ ] Take the add-on offline. The card shows "Unavailable" and disables the buttons, with a hint.
-- [ ] Bring it back online. The card recovers without a reload.
-- [ ] While offline, click a button. A rejected call shows a toast and a red outline for about 2.5 s,
+- [x] Take the add-on offline. The card shows "Unavailable" and disables the buttons, with a hint.
+- [x] Bring it back online. The card recovers without a reload.
+- [x] While offline, click a button. A rejected call shows a toast and a red outline for about 2.5 s,
   not "not confirmed".
-- [ ] Set `pending_timeout: 5` and request a mode. If the unit takes longer than that to report it,
+- [x] Set `pending_timeout: 5` and request a mode. If the unit takes longer than that to report it,
   the amber "not confirmed" state appears and disappears after about 5 s, and the reported mode
   stays highlighted.
-- [ ] Restart Home Assistant. The card loads and shows the current mode once the entities return.
-- [ ] Use a wrong entity ID. The card shows a warning badge naming the entity.
-- [ ] Use a wrong preset name in `preset_modes`. The badge lists the preset.
+- [x] Restart Home Assistant. The card loads and shows the current mode once the entities return.
+- [x] Use a wrong entity ID. The card shows a warning badge naming the entity.
+- [x] Use a wrong preset name in `preset_modes`. The badge lists the preset.
 
 ### Appearance
 
-- [ ] Light and dark theme: text and buttons are readable, the active button is clearly different.
-- [ ] A custom theme with another primary colour. Switching themes updates the card live.
-- [ ] Masonry view.
-- [ ] Sections view at 12 and at 6 columns (resize the card in edit mode). Nothing is clipped.
-- [ ] Mobile app at about 360 px. Touch targets are comfortable.
-- [ ] Browser zoom at 200% is still usable.
-
-## Measuring the status update interval
-
-Open question 1 in [roadmap.md](roadmap.md): how quickly does the mode sensor reflect a change?
-
-1. Request a mode from the card and note the time of the click.
-2. In **Developer tools → States**, or the entity's history, note when the mode sensor changes.
-3. Repeat several times, for both card requests and remote control changes.
-
-Record the delay here. If it regularly approaches 60 s, raise the default `pending_timeout`.
+- [x] Light and dark theme: text and buttons are readable, the active button is clearly different.
+- [x] A custom theme with another primary colour. Switching themes updates the card live.
+- [x] Masonry view.
+- [x] Sections view at 12 and at 6 columns (resize the card in edit mode). Nothing is clipped.
+- [x] Mobile app at about 360 px. Touch targets are comfortable.
+- [x] Browser zoom at 200% is still usable.
 
 ## Results
 
 | Date | Home Assistant | Add-on | Card | Result |
 | ---- | -------------- | ------ | ---- | ------ |
 |      |                |        |      |        |
-
-Measured status update delay:
