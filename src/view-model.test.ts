@@ -165,6 +165,38 @@ describe('preset warnings', () => {
   });
 });
 
+describe('issues', () => {
+  const withPresets = (presets: unknown) =>
+    makeHass({ 'fan.control': entity('fan.control', 'unknown', { preset_modes: presets }) });
+
+  it('is empty when nothing is wrong', () => {
+    expect(derive().issues).toEqual([]);
+  });
+
+  it('keeps a single missing preset as its own line', () => {
+    expect(derive(withPresets(['Low', 'Medium', 'Auto'])).issues).toEqual([
+      'Preset "High" is not offered by fan.control',
+    ]);
+  });
+
+  it('merges several missing presets into one line', () => {
+    const vm = derive(withPresets(['Low', 'Auto']));
+    expect(vm.issues).toEqual(['Presets not offered by fan.control: "Medium", "High"']);
+    // `warnings` is unchanged.
+    expect(vm.warnings).toHaveLength(2);
+  });
+
+  it('lists missing entities before the merged preset line', () => {
+    const hass = withPresets([]);
+    delete hass.states['sensor.supply'];
+    const vm = derive(hass);
+    expect(vm.issues).toEqual([
+      'Entity not found: sensor.supply',
+      'Presets not offered by fan.control: "Low", "Medium", "High", "Auto"',
+    ]);
+  });
+});
+
 describe('fan rows', () => {
   it('formats value with unit', () => {
     const vm = derive();

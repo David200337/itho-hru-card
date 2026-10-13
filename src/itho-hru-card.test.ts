@@ -50,7 +50,7 @@ describe('registration', () => {
   it('implements the card API', () => {
     const el = document.createElement('itho-hru-card') as IthoHruCard;
     expect(el.getCardSize()).toBeGreaterThan(0);
-    expect(el.getGridOptions().columns).toBe(12);
+    expect(el.getGridOptions()).toEqual({ columns: 12, rows: 'auto', min_columns: 6 });
     expect(() => el.setConfig(IthoHruCard.getStubConfig())).not.toThrow();
   });
 
@@ -64,22 +64,20 @@ describe('rendering', () => {
   it('shows the title, mode and fan speed', async () => {
     const el = await mount();
     const root = el.shadowRoot!;
-    expect((root.querySelector('ha-card') as unknown as { header: string }).header).toBe(
-      'Ventilation',
-    );
+    expect(root.querySelector('.caption')?.textContent).toBe('Ventilation');
     expect(root.querySelector('.mode-label')?.textContent).toBe('Auto');
-    expect(root.querySelector('.fan-value')?.textContent).toBe('1200 rpm');
+    expect(root.querySelector('.fan')?.textContent).toBe('Supply fan 1200 rpm');
   });
 
   it('hides unconfigured fan rows', async () => {
     const el = await mount({ ...baseConfig, supply_fan_entity: undefined });
-    expect(el.shadowRoot!.querySelector('.fans')).toBeNull();
+    expect(el.shadowRoot!.querySelector('.secondary')).toBeNull();
   });
 
   it('highlights the button of the reported mode', async () => {
     const hass = makeHass();
     const el = await mount(baseConfig, hass);
-    const pressed = [...el.shadowRoot!.querySelectorAll('button')].map((b) =>
+    const pressed = [...el.shadowRoot!.querySelectorAll('.segments button')].map((b) =>
       b.getAttribute('aria-pressed'),
     );
     expect(pressed).toEqual(['false', 'false', 'false', 'true']);
@@ -90,14 +88,39 @@ describe('rendering', () => {
     el.hass = makeHass({ 'sensor.mode': entity('sensor.mode', '3') });
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector('.mode-label')?.textContent).toBe('High');
-    expect(el.shadowRoot!.querySelectorAll('button')[2]!.getAttribute('aria-pressed')).toBe('true');
+    expect(
+      el.shadowRoot!.querySelectorAll('.segments button')[2]!.getAttribute('aria-pressed'),
+    ).toBe('true');
   });
 
   it('shows warnings for missing entities', async () => {
     const hass = makeHass();
     delete hass.states['sensor.supply'];
     const el = await mount(baseConfig, hass);
-    expect(el.shadowRoot!.querySelector('.warning')?.textContent).toContain('sensor.supply');
+    const panel = el.shadowRoot!.querySelector('.issues-panel')!;
+    expect(panel.hasAttribute('data-open')).toBe(false); // folded behind the badge
+    el.shadowRoot!.querySelector<HTMLButtonElement>('.issues')!.click();
+    await el.updateComplete;
+    expect(panel.hasAttribute('data-open')).toBe(true);
+    expect(panel.querySelector('.banner')?.textContent).toContain('sensor.supply');
+  });
+});
+
+describe('accessibility', () => {
+  it('labels the card and the mode buttons as groups', async () => {
+    const el = await mount();
+    const groups = [...el.shadowRoot!.querySelectorAll('[role="group"]')];
+    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual([
+      'Ventilation',
+      'Ventilation mode',
+    ]);
+    expect(groups[1]!.querySelectorAll('button')).toHaveLength(4);
+  });
+
+  it('uses native buttons so Tab, Enter and Space work', async () => {
+    const el = await mount();
+    const buttons = [...el.shadowRoot!.querySelectorAll('.segments button')];
+    expect(buttons.every((b) => b instanceof HTMLButtonElement && b.type === 'button')).toBe(true);
   });
 });
 
@@ -124,8 +147,13 @@ describe('mode control', () => {
   beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] }));
   afterEach(() => vi.useRealTimers());
 
-  const buttons = (el: IthoHruCard) => [...el.shadowRoot!.querySelectorAll('button')];
-  const status = (el: IthoHruCard) => el.shadowRoot!.querySelector('.status')?.textContent?.trim();
+  const buttons = (el: IthoHruCard) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLButtonElement>('.segments button'),
+  ];
+  /** The request state shown on the buttons and the status line. */
+  const status = (el: IthoHruCard) => {
+    return el.shadowRoot!.querySelector('.status-line')?.textContent?.trim();
+  };
   const config = { ...baseConfig, pending_timeout: 30 };
 
   it('calls fan.set_preset_mode with the configured preset', async () => {
@@ -142,7 +170,8 @@ describe('mode control', () => {
     const el = await mount(config);
     buttons(el)[0]!.click();
     await el.updateComplete;
-    expect(buttons(el)[0]!.classList.contains('pending')).toBe(true);
+    expect(buttons(el)[0]!.classList.contains('waiting')).toBe(true);
+    expect(buttons(el)[0]!.getAttribute('aria-busy')).toBe('true');
     expect(buttons(el).map((b) => b.getAttribute('aria-pressed'))).toEqual([
       'false',
       'false',
@@ -150,7 +179,8 @@ describe('mode control', () => {
       'true',
     ]);
     expect(el.shadowRoot!.querySelector('.mode-label')?.textContent).toBe('Auto');
-    expect(status(el)).toContain('waiting');
+    expect(status(el)).toBe('Switching to Low…');
+    expect(el.shadowRoot!.querySelector('.status-line .spinner')).not.toBeNull();
   });
 
   it('clears the request when the device confirms', async () => {
@@ -160,7 +190,7 @@ describe('mode control', () => {
     el.hass = makeHass({ 'sensor.mode': entity('sensor.mode', '1') });
     await el.updateComplete;
     expect(status(el)).toBeUndefined();
-    expect(buttons(el)[0]!.classList.contains('pending')).toBe(false);
+    expect(buttons(el)[0]!.classList.contains('waiting')).toBe(false);
     expect(buttons(el)[0]!.getAttribute('aria-pressed')).toBe('true');
   });
 
@@ -174,8 +204,156 @@ describe('mode control', () => {
     vi.advanceTimersByTime(30_000);
     await el.updateComplete;
     expect(status(el)).toContain('not confirmed');
-    expect(buttons(el)[0]!.classList.contains('pending')).toBe(true);
+    expect(buttons(el)[0]!.classList.contains('stale')).toBe(true);
     expect(notified).not.toHaveBeenCalled();
+  });
+
+  describe('temporary "not confirmed" feedback', () => {
+    const pressed = (el: IthoHruCard) => buttons(el).map((b) => b.getAttribute('aria-pressed'));
+    const idle = (el: IthoHruCard) =>
+      buttons(el).every(
+        (b) => !b.classList.contains('waiting') && !b.classList.contains('stale'),
+      ) && !el.shadowRoot!.querySelector('.status-line');
+
+    async function timedOut(hass = makeHass()) {
+      const el = await mount(config, hass);
+      buttons(el)[0]!.click();
+      await el.updateComplete;
+      vi.advanceTimersByTime(30_000);
+      await el.updateComplete;
+      return { el, hass };
+    }
+
+    it('goes back to idle about five seconds after the timeout', async () => {
+      const { el, hass } = await timedOut();
+      const notified = vi.fn();
+      el.addEventListener('hass-notification', notified);
+      expect(buttons(el)[0]!.classList.contains('stale')).toBe(true);
+      expect(status(el)).toContain('not confirmed');
+
+      vi.advanceTimersByTime(4_900);
+      await el.updateComplete;
+      expect(buttons(el)[0]!.classList.contains('stale')).toBe(true);
+
+      vi.advanceTimersByTime(100);
+      await el.updateComplete;
+      expect(idle(el)).toBe(true);
+      // The reported mode stays highlighted, and nothing was reported as an error.
+      expect(pressed(el)).toEqual(['false', 'false', 'false', 'true']);
+      expect(el.shadowRoot!.querySelector('.mode-label')?.textContent).toBe('Auto');
+      expect(buttons(el)[0]!.classList.contains('failed')).toBe(false);
+      expect(notified).not.toHaveBeenCalled();
+      expect(hass.callService).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the reported mode highlighted while it is shown', async () => {
+      const { el } = await timedOut();
+      expect(pressed(el)).toEqual(['false', 'false', 'false', 'true']);
+    });
+
+    it('lets the user retry the same mode right after the timeout', async () => {
+      const { el, hass } = await timedOut();
+      buttons(el)[0]!.click();
+      await el.updateComplete;
+      expect(hass.callService).toHaveBeenCalledTimes(2);
+      expect(buttons(el)[0]!.classList.contains('waiting')).toBe(true);
+      expect(buttons(el)[0]!.classList.contains('stale')).toBe(false);
+    });
+
+    it('lets the user retry after the feedback has gone', async () => {
+      const { el, hass } = await timedOut();
+      vi.advanceTimersByTime(5_000);
+      await el.updateComplete;
+      expect(idle(el)).toBe(true);
+      buttons(el)[0]!.click();
+      await el.updateComplete;
+      expect(hass.callService).toHaveBeenCalledTimes(2);
+      expect(status(el)).toContain('Switching to');
+    });
+
+    it('clears the feedback when the device confirms during the window', async () => {
+      const { el } = await timedOut();
+      vi.advanceTimersByTime(2_000);
+      el.hass = makeHass({ 'sensor.mode': entity('sensor.mode', '1') });
+      await el.updateComplete;
+      expect(idle(el)).toBe(true);
+      expect(pressed(el)).toEqual(['true', 'false', 'false', 'false']);
+    });
+
+    it('does not announce the message again on unrelated updates', async () => {
+      const { el, hass } = await timedOut();
+      const line = el.shadowRoot!.querySelector('.status-line');
+      expect(line?.getAttribute('role')).toBe('status');
+      vi.advanceTimersByTime(1_000);
+      el.hass = {
+        ...hass,
+        states: { ...hass.states, 'sensor.supply': entity('sensor.supply', '900') },
+      };
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('.status-line')).toBe(line);
+    });
+
+    it('stays separate from the persistent warnings', async () => {
+      const hass = makeHass({
+        'fan.control': entity('fan.control', 'unknown', {
+          preset_modes: ['Low', 'Medium', 'Auto'],
+        }),
+      });
+      const { el } = await timedOut(hass);
+      vi.advanceTimersByTime(5_000);
+      await el.updateComplete;
+      expect(idle(el)).toBe(true);
+      // The configuration warning is still available behind the badge.
+      expect(el.shadowRoot!.querySelector('.issues')?.textContent?.trim()).toBe('1');
+    });
+  });
+
+  describe('mode buttons stay mode buttons', () => {
+    const faces = (el: IthoHruCard) =>
+      buttons(el).map((b) => ({
+        icon: (b.querySelector('ha-icon') as unknown as { icon: string }).icon,
+        label: b.querySelector('span')?.textContent,
+      }));
+
+    it('keeps every icon and label while waiting, unconfirmed, and after a rejection', async () => {
+      const hass = makeHass();
+      const el = await mount(config, hass);
+      const idle = faces(el);
+      expect(idle.map((f) => f.label)).toEqual(['Low', 'Medium', 'High', 'Auto']);
+
+      buttons(el)[0]!.click();
+      await el.updateComplete;
+      expect(faces(el)).toEqual(idle);
+      expect(status(el)).toBe('Switching to Low…');
+
+      vi.advanceTimersByTime(30_000);
+      await el.updateComplete;
+      expect(buttons(el)[0]!.classList.contains('stale')).toBe(true);
+      expect(faces(el)).toEqual(idle);
+      expect(status(el)).toBe('Low not confirmed');
+
+      vi.advanceTimersByTime(5_000);
+      await el.updateComplete;
+      hass.callService = vi.fn(async () => {
+        throw new Error('nope');
+      });
+      buttons(el)[1]!.click();
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      expect(buttons(el)[1]!.classList.contains('failed')).toBe(true);
+      expect(faces(el)).toEqual(idle);
+    });
+
+    it('keeps the reported mode highlighted in every state', async () => {
+      const el = await mount(config);
+      buttons(el)[0]!.click();
+      await el.updateComplete;
+      const reported = () => buttons(el).map((b) => b.getAttribute('aria-pressed'));
+      expect(reported()).toEqual(['false', 'false', 'false', 'true']);
+      vi.advanceTimersByTime(30_000);
+      await el.updateComplete;
+      expect(reported()).toEqual(['false', 'false', 'false', 'true']);
+    });
   });
 
   it('sends no second call for the same pending mode', async () => {
@@ -205,13 +383,12 @@ describe('mode control', () => {
     buttons(el)[0]!.click();
     await el.updateComplete;
     expect(hass.callService).toHaveBeenCalledTimes(2);
-    expect(status(el)).toContain('waiting');
-    expect(status(el)).not.toContain('not confirmed');
+    expect(status(el)).toContain('Switching to');
 
     // The new request has its own full timeout.
     vi.advanceTimersByTime(29_000);
     await el.updateComplete;
-    expect(status(el)).toContain('waiting');
+    expect(status(el)).toContain('Switching to');
     vi.advanceTimersByTime(1_000);
     await el.updateComplete;
     expect(status(el)).toContain('not confirmed');
@@ -233,7 +410,7 @@ describe('mode control', () => {
     await vi.advanceTimersByTimeAsync(0);
     await el.updateComplete;
     expect(notified).toHaveBeenCalledTimes(1);
-    expect(status(el)).toBeUndefined();
+    expect(buttons(el).some((b) => b.classList.contains('stale'))).toBe(false);
   });
 
   it('does not present an already-matching sensor as an acknowledgment', async () => {
@@ -244,7 +421,7 @@ describe('mode control', () => {
     expect(hass.callService).toHaveBeenCalledTimes(1);
     // No request or confirmation is shown; the highlight is just the reported mode.
     expect(status(el)).toBeUndefined();
-    expect(buttons(el)[3]!.classList.contains('pending')).toBe(false);
+    expect(buttons(el)[3]!.classList.contains('waiting')).toBe(false);
     expect(buttons(el)[3]!.getAttribute('aria-pressed')).toBe('true');
   });
 
@@ -259,9 +436,27 @@ describe('mode control', () => {
     buttons(el)[0]!.click();
     await vi.advanceTimersByTimeAsync(0);
     await el.updateComplete;
-    expect(status(el)).toBeUndefined();
+    expect(buttons(el).some((b) => b.classList.contains('waiting'))).toBe(false);
     expect(notified).toHaveBeenCalledTimes(1);
     expect((notified.mock.calls[0]![0] as CustomEvent).detail.message).toContain('Low');
+  });
+
+  it('shows a rejected request briefly and then clears it', async () => {
+    const hass = makeHass();
+    hass.callService = vi.fn(async () => {
+      throw new Error('nope');
+    });
+    const el = await mount(config, hass);
+    buttons(el)[0]!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    await el.updateComplete;
+    expect(buttons(el)[0]!.classList.contains('failed')).toBe(true);
+    expect(el.shadowRoot!.querySelector('.status-line.error')?.textContent).toContain('Low');
+
+    await vi.advanceTimersByTimeAsync(2500);
+    await el.updateComplete;
+    expect(buttons(el)[0]!.classList.contains('failed')).toBe(false);
+    expect(el.shadowRoot!.querySelector('.status-line')).toBeNull();
   });
 
   it.each(['unavailable', null])(
@@ -282,6 +477,11 @@ describe('mode control', () => {
       'fan.control': entity('fan.control', 'unknown', { preset_modes: ['Low', 'Medium', 'Auto'] }),
     });
     const el = await mount(config, hass);
-    expect(el.shadowRoot!.querySelector('.warning')?.textContent).toContain('"High"');
+    const root = el.shadowRoot!;
+    expect(root.querySelector('.issues')?.textContent?.trim()).toBe('1');
+    root.querySelector<HTMLButtonElement>('.issues')!.click();
+    await el.updateComplete;
+    expect(root.querySelector('.banner')?.textContent).toContain('"High"');
+    expect(root.querySelector('.issues')?.getAttribute('aria-expanded')).toBe('true');
   });
 });

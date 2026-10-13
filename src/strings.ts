@@ -8,10 +8,14 @@ export const strings = {
   missingEntity: (entityId: string) => `Entity not found: ${entityId}`,
   presetMissing: (preset: string, entityId: string) =>
     `Preset "${preset}" is not offered by ${entityId}`,
-  requestWaiting: (label: string) => `Requested ${label}, waiting for the device…`,
-  requestNotConfirmed: (label: string) => `${label} not confirmed by the device yet`,
+  presetsMissing: (presets: readonly string[], entityId: string) =>
+    `Presets not offered by ${entityId}: ${presets.map((p) => `"${p}"`).join(', ')}`,
+  issuesLabel: (count: number) => (count === 1 ? '1 warning' : `${count} warnings`),
+  requestWaiting: (label: string) => `Switching to ${label}…`,
+  requestNotConfirmed: (label: string) => `${label} not confirmed`,
   requestFailed: (label: string) => `Could not set mode ${label}`,
   currentMode: 'Current mode',
+  modeGroup: 'Ventilation mode',
   supplyFan: 'Supply fan',
   exhaustFan: 'Exhaust fan',
   cardName: 'Itho HRU',
