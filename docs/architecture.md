@@ -108,7 +108,9 @@ src/
   styles.ts         Lit css`` using HA theme variables.
   strings.ts        All user-facing English strings.
 dev/
-  index.html, mock-hass.ts   Standalone harness with simulated device.
+  index.html, main.ts, mock-hass.ts   Standalone harness with simulated device.
+  gallery.html, gallery.ts            Every card state at several widths and themes.
+  ha-stubs.ts                         Stand-ins for ha-card and ha-icon.
 ```
 
 Data flow:
@@ -170,11 +172,16 @@ so the fan entity's state is normally `unknown`.
   - It is cleared when the reported mode equals the requested mode.
   - After `pending_timeout` seconds without a match, the request is shown as **"not confirmed"**.
     This doesn't mean the command failed; the device may simply not have reported yet.
+  - That feedback is temporary: a thin solid amber outline on the requested button plus
+    "<Mode> not confirmed" in the status line under the mode. About 5 s after the timeout (an internal UI constant, not a config option) it
+    fades out and the request is dropped, so the button is idle again. The reported mode stays
+    highlighted throughout. If the device confirms in the meantime, it clears immediately.
   - Clicking the already-pending mode again does not send a second call.
   - A new request replaces the old one.
   - The pending state does not survive a page reload, which is acceptable.
-- **Failure** is only reported when `callService` rejects. That clears the pending state and
-  fires a `hass-notification` toast.
+- **Failure** is only reported when `callService` rejects. That clears the pending state, fires a
+  `hass-notification` toast and marks the button red for 2.5 s (a display-only `failed` state in
+  the component, not in the view model).
 
 Because `now` is injected into `deriveViewModel`, the timeout logic is testable without fake
 timers. The component schedules a single re-render at the timeout moment.
@@ -189,8 +196,8 @@ timers. The component schedules a single re-render at the timeout moment.
 | Fan value non-numeric             | "—"                                        |
 | Control entity missing/unavailable| Buttons disabled, with a hint             |
 | Control entity `unknown`          | Normal (expected)                          |
-| Configured preset not in the control entity's `preset_modes` | Inline warning naming the preset (case-sensitive) |
-| Configured entity ID not in `hass.states` | Inline warning naming the entity    |
+| Configured preset not in the control entity's `preset_modes` | One combined line in `issues`, naming the presets (case-sensitive) |
+| Configured entity ID not in `hass.states` | A line in `issues` naming the entity |
 
 Fan speed units come from `unit_of_measurement`; if the attribute is absent, the card shows the
 bare number.
@@ -203,23 +210,57 @@ bare number.
   `--ha-card-border-radius`.
 - No hard-coded colours, so light and dark mode follow the active theme automatically.
 - Buttons are native `<button>` elements with `aria-pressed`, visible focus and a hit area of at
-  least 40 px. The active mode uses the primary colour; pending uses an outline or progress style.
+  least 44 px. The active mode uses the primary colour; pending breathes an inset outline.
 - Icons come from `ha-icon` with `mdi:` names (`mdi:fan-speed-1`, `mdi:fan-speed-2`,
   `mdi:fan-speed-3`, `mdi:fan-auto`).
 
 ### Visual design (M5)
 
-The design direction is still to be selected in M5. Once chosen, it is recorded here with its
-rationale and a table mapping each card state to how it looks. Constraints agreed up front:
+**Chosen direction: "Tile with chip messages".** Chosen from throwaway prototypes of three layouts
+(tile, readout, remote) and four message styles (inline, banner, chip, overlay).
 
-- Compact by default: 6 columns × at most 3 rows in sections view.
-- Fan speeds as text only, with no bars or gauges.
-- Changes stay in the presentation layer. `view-model.ts` may gain additive, display-only fields
-  but no changes in meaning.
+- Header: an icon badge, then a small uppercase caption (the title, or "Current mode"), the mode in
+  larger type, and the fan speeds in a lighter 11 px line. Hierarchy comes from size, weight and
+  colour: caption 500, mode 500, fans 400.
+- Four mode buttons in one row, icon above label, down to 280 px.
+- Messages never take their own row, so the card keeps its height:
+  - a rejected or unconfirmed request replaces the fan line;
+  - warnings fold into a `⚠ N` badge that expands the list on click;
+  - the control hint (buttons disabled) stays visible under the buttons.
+
+| State | Look |
+| --- | --- |
+| Reported Low, Medium, High, Auto | That button filled with the primary colour (grows in over 200 ms) |
+| AutoNight, Timer, unknown code | No button filled; the mode label names it |
+| Mode unavailable | Muted badge, label "Unavailable" |
+| Pending (waiting) | The requested button gets a thin inset outline that breathes (opacity only). The status line reads "Switching to Medium…" with a small spinner, in place of the fan line |
+| Not confirmed | Thin solid amber outline on the button; the status line reads "Medium not confirmed" with an amber clock. Shown for about 5 s, then back to idle. Not red |
+| Rejected call | Thin red outline on the button for 2.5 s; the status line shows the error and fades out; toast fires |
+| Control unavailable or missing | Buttons disabled; hint under the buttons |
+| Entity or preset warnings | `⚠ N` badge in the header; expands to tinted lines. Missing presets are merged into one line |
+| Fan sensors missing | Fan line hidden |
+| Fan value unusable | "—" |
+| No title / long title | Caption falls back to "Current mode" / ellipsis with the full text on hover |
+
+Motion uses only `opacity` and `transform` (plus a short colour fade), a strong ease-out
+(`cubic-bezier(0.23, 1, 0.32, 1)`) and stays within 200 ms. `prefers-reduced-motion` keeps a static
+ring for pending and removes the movement.
+
+Constraints agreed up front:
+
+- Default size in sections view is the full section width (12 columns) with automatic height
+  (`rows: 'auto'`), and it can be shrunk to 6 columns. A section is 12 columns wide, so 6 columns
+  can be as little as about 170 px; below 240 px the badge is dropped, and below 190 px the buttons
+  show icons only (labels stay for screen readers and as tooltips). Configured fan speeds always
+  stay visible and wrap onto extra lines.
+- Fan speeds as text only, with no bars or gauges. Numbers are never truncated; the fan line wraps
+  between the two values instead.
+- Changes stay in the presentation layer. `view-model.ts` gained one additive, display-only field,
+  `issues` (`warnings` with all missing presets merged into one line); `warnings` is unchanged.
 - Newer HA design variables are used only with fallbacks, because the minimum version is 2024.11.
 - Accessibility target is WCAG 2.2 AA. State is never shown by colour alone, status messages are
-  announced through a polite live region, touch targets are at least 44 px high, and reduced
-  motion is respected.
+  announced through a live region, touch targets are at least 44 px, and reduced motion is
+  respected.
 
 ## Testing strategy
 
@@ -228,8 +269,10 @@ rationale and a table mapping each card state to how it looks. Constraints agree
    `callService` arguments, assign a new `hass` and assert the update.
 3. **Mock harness (`npm run dev`):** fake `hass` with controls for external mode changes,
    unavailability, unknown codes and a simulated device delay. Stubs `ha-card` and `ha-icon`.
-4. **Visual gallery (`dev/`, M5):** every card state, in light and dark, at card widths of 280,
-   360, 480 and 600+ px, on one page. Reviewed manually, with no pixel comparison. Reference
+4. **Visual gallery (`dev/gallery.html`, M5):** every card state, in light, dark and a custom-primary
+   theme, at card widths of 280, 360, 480 and 600 px, on one page. Open it with `npm run dev` and
+   follow the link, or use `?theme=light|dark|custom|all`. Icons are loaded from the MDI set, so it
+   needs a network connection. Reviewed manually, with no pixel comparison. Reference
    screenshots live in `docs/images/`.
 5. **Real Home Assistant:** build into `config/www/` and register `/local/itho-hru-card.js?v=N` as
    a dashboard resource. Follow the manual checklist in `docs/testing.md` (added in milestone 6).
@@ -246,7 +289,12 @@ rationale and a table mapping each card state to how it looks. Constraints agree
 | Visual editor deferred to v0.2 | Keeps the MVP small |
 | English only in MVP | Strings are kept together to ease later i18n |
 | Minimum HA 2024.11 | `getGridOptions` |
-| Compact default size (6 × ≤3) | Fits alongside other cards in a section; users can still resize |
+| Default 12 columns, auto height, min 6 columns | 6 columns was only about 150-170 px in a real section and too small. 8 or 9 columns (about 225-255 px) are below the 280 px minimum and leave odd gaps in a 12-column grid. Auto height avoids clipping when the narrow layout wraps |
 | Fan speeds as text only | A bar would need a new option or a hard-coded maximum RPM |
 | Manual visual gallery, no pixel diffing | Avoids a heavy, font-sensitive dev dependency for a small project |
 | Design prototypes stay out of `main` | Only the chosen direction ships; screenshots go in the PR |
+| Tile layout with chip messages | Compact, native to HA, and messages never change the card's height |
+| "Not confirmed" feedback lasts 5 s, then the request is dropped | A permanent not-confirmed button looked like a stuck error; retrying was always allowed anyway |
+| Mode buttons never change icon or label | A button is a ventilation mode, not a status. Status lives in the status line and in the outline. The status line takes the fan line's place, so the card keeps its height |
+| Rejected call highlight is temporary (2.5 s) | A persistent error state looked like the device was stuck; the toast remains the durable signal |
+| Missing presets merged in `issues`, not `warnings` | One line instead of four; keeps existing `warnings` semantics and tests |

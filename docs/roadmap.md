@@ -118,7 +118,7 @@ Acceptance:
   - fan sensors not configured, and fan values unavailable;
   - with and without a title, including a long title.
 - **Compact and responsive**
-  - Default size is 6 columns by at most 3 rows in sections view (`getGridOptions`). With the
+  - Default size is 12 columns with automatic height in sections view, resizable down to 6 columns (`getGridOptions`). With the
     default config and no warnings, the card fits without clipping. `getCardSize` matches.
   - No overflow, clipping or overlap at card widths of 280, 360, 480 and 600+ px.
   - The four mode buttons stay on one row down to 280 px.
