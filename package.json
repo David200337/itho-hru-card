@@ -9,7 +9,7 @@
     "node": ">=24.0.0"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --open /dev/index.html",
     "build": "vite build",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",

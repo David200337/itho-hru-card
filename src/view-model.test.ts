@@ -38,7 +38,13 @@ const derive = (hass = makeHass(), pending?: PendingRequest, now = 0, cfg = conf
 describe('mode display', () => {
   it('shows a known mode and highlights its button', () => {
     const vm = derive();
-    expect(vm.mode).toEqual({ kind: 'known', label: 'Auto', mode: 'auto', code: 24 });
+    expect(vm.mode).toEqual({
+      kind: 'known',
+      label: 'Auto',
+      icon: 'mdi:fan-auto',
+      mode: 'auto',
+      code: 24,
+    });
     expect(vm.buttons.map((b) => [b.mode, b.active])).toEqual([
       ['low', false],
       ['medium', false],
@@ -67,13 +73,13 @@ describe('mode display', () => {
 
   it('shows "Mode N" for an unknown code', () => {
     const vm = derive(makeHass({ 'sensor.mode': entity('sensor.mode', '17') }));
-    expect(vm.mode).toEqual({ kind: 'other', label: 'Mode 17', code: 17 });
+    expect(vm.mode).toEqual({ kind: 'other', label: 'Mode 17', icon: 'mdi:fan-alert', code: 17 });
     expect(vm.buttons.some((b) => b.active)).toBe(false);
   });
 
   it.each(['unknown', 'unavailable', 'abc'])('shows Unavailable for mode state %s', (state) => {
     const vm = derive(makeHass({ 'sensor.mode': entity('sensor.mode', state) }));
-    expect(vm.mode).toEqual({ kind: 'unavailable', label: 'Unavailable' });
+    expect(vm.mode).toEqual({ kind: 'unavailable', label: 'Unavailable', icon: 'mdi:fan-alert' });
     expect(vm.buttons.some((b) => b.active)).toBe(false);
   });
 
@@ -246,5 +252,21 @@ describe('pending requests', () => {
     });
     expect(derive(makeHass(), requested, 5_999, cfg).pending?.status).toBe('waiting');
     expect(derive(makeHass(), requested, 6_000, cfg).pending?.status).toBe('not-confirmed');
+  });
+});
+
+describe('icons', () => {
+  it('maps modes to icons', () => {
+    expect(derive().mode.icon).toBe('mdi:fan-auto');
+    expect(derive().buttons.map((b) => b.icon)).toEqual([
+      'mdi:fan-speed-1',
+      'mdi:fan-speed-2',
+      'mdi:fan-speed-3',
+      'mdi:fan-auto',
+    ]);
+    expect(derive(makeHass({ 'sensor.mode': entity('sensor.mode', '99') })).mode.icon).toBe(
+      'mdi:fan-alert',
+    );
+    expect(derive(makeHass({ 'sensor.mode': undefined })).mode.icon).toBe('mdi:fan-alert');
   });
 });

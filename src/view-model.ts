@@ -2,6 +2,7 @@ import type { IthoHruCardConfig } from './config';
 import type { HassEntity, HomeAssistant } from './ha-types';
 import {
   CONTROL_MODES,
+  MODE_ICONS,
   isControlMode,
   parseActualMode,
   parseNumber,
@@ -19,6 +20,7 @@ export interface PendingRequest {
 export interface ModeView {
   kind: 'known' | 'other' | 'unavailable';
   label: string;
+  icon: string;
   mode?: ModeId;
   code?: number;
 }
@@ -26,6 +28,7 @@ export interface ModeView {
 export interface ButtonView {
   mode: ControlMode;
   label: string;
+  icon: string;
   preset: string;
   /** Highlighted: the reported mode. */
   active: boolean;
@@ -68,13 +71,19 @@ function modeView(entity: HassEntity | undefined): ModeView {
       return {
         kind: 'known',
         label: strings.modeLabels[parsed.mode],
+        icon: MODE_ICONS[parsed.mode],
         mode: parsed.mode,
         code: parsed.code,
       };
     case 'other':
-      return { kind: 'other', label: strings.otherMode(parsed.code), code: parsed.code };
+      return {
+        kind: 'other',
+        label: strings.otherMode(parsed.code),
+        icon: MODE_ICONS.other,
+        code: parsed.code,
+      };
     default:
-      return { kind: 'unavailable', label: strings.unavailable };
+      return { kind: 'unavailable', label: strings.unavailable, icon: MODE_ICONS.other };
   }
 }
 
@@ -117,6 +126,7 @@ export function deriveViewModel(
   const buttons = CONTROL_MODES.map((id): ButtonView => ({
     mode: id,
     label: strings.modeLabels[id],
+    icon: MODE_ICONS[id],
     preset: config.preset_modes[id],
     active: mode.mode !== undefined && isControlMode(mode.mode) && mode.mode === id,
     pending: activePending?.mode === id,
