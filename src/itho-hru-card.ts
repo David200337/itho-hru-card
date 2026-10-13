@@ -1,4 +1,5 @@
 import { LitElement, html, nothing, type PropertyValues } from 'lit';
+import { keyed } from 'lit/directives/keyed.js';
 import { validateConfig, type IthoHruCardConfig } from './config';
 import type { HomeAssistant } from './ha-types';
 import { strings } from './strings';
@@ -47,6 +48,10 @@ export class IthoHruCard extends LitElement {
   private vm?: ViewModel;
   private timeoutTimer?: ReturnType<typeof setTimeout>;
   private failedTimer?: ReturnType<typeof setTimeout>;
+  /** Whether the last render showed a status line, so the fan line can animate back in. */
+  private hadStatusLine = false;
+  /** The fan text last shown per label, to animate only real changes of a visible value. */
+  private shownFans = new Map<string, string>();
 
   static getStubConfig() {
     return {
@@ -201,17 +206,28 @@ export class IthoHruCard extends LitElement {
     return nothing;
   }
 
-  private renderFan(label: string, fan: FanView | undefined) {
+  private renderFan(label: string, fan: FanView | undefined, enter: boolean) {
     if (!fan) return nothing;
+    const previous = this.shownFans.get(label);
+    this.shownFans.set(label, fan.text);
+    const changed = !enter && previous !== undefined && previous !== fan.text;
+    // Keyed on the text so a new value gets a fresh element, which replays the animation.
     return html`<span class="fan"
-      ><span class="fan-label">${label}</span> <span class="fan-value">${fan.text}</span></span
+      ><span class="fan-label">${label}</span> ${keyed(
+        fan.text,
+        html`<span class="fan-value ${changed ? 'changed' : ''}">${fan.text}</span>`,
+      )}</span
     >`;
   }
 
-  private renderFans(vm: ViewModel) {
+  private renderFans(vm: ViewModel, enter: boolean) {
     if (!vm.supply && !vm.exhaust) return nothing;
-    return html`<div class="secondary">
-      ${this.renderFan(strings.supplyFan, vm.supply)}${this.renderFan(strings.exhaustFan, vm.exhaust)}
+    return html`<div class="secondary ${enter ? 'enter' : ''}">
+      ${this.renderFan(strings.supplyFan, vm.supply, enter)}${this.renderFan(
+        strings.exhaustFan,
+        vm.exhaust,
+        enter,
+      )}
     </div>`;
   }
 
@@ -220,6 +236,8 @@ export class IthoHruCard extends LitElement {
     const vm = this.vm;
     if (!vm) return nothing;
     const statusLine = this.renderStatusLine(vm);
+    const fansEnter = this.hadStatusLine && statusLine === nothing;
+    this.hadStatusLine = statusLine !== nothing;
     return html`<ha-card>
       <div class="card" role="group" aria-label=${vm.title ?? strings.cardName}>
         <div class="head">
@@ -229,7 +247,7 @@ export class IthoHruCard extends LitElement {
           <div class="text">
             <div class="caption" title=${vm.title ?? ''}>${vm.title ?? strings.currentMode}</div>
             <div class="mode-label">${vm.mode.label}</div>
-            ${statusLine === nothing ? this.renderFans(vm) : statusLine}
+            ${statusLine === nothing ? this.renderFans(vm, fansEnter) : statusLine}
           </div>
           ${
             vm.issues.length

@@ -239,6 +239,8 @@ bare number.
 | Control unavailable or missing | Buttons disabled; hint under the buttons |
 | Entity or preset warnings | `⚠ N` badge in the header; expands to tinted lines. Missing presets are merged into one line |
 | Fan sensors missing | Fan line hidden |
+| Fan line returns after a status line | Slides in from 3 px below, 160 ms (mirror of the status line arriving from above) |
+| Fan value changes | The new number settles in from 3 px below, 160 ms. Not on first render |
 | Fan value unusable | "—" |
 | No title / long title | Caption falls back to "Current mode" / ellipsis with the full text on hover |
 
