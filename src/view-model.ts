@@ -108,6 +108,15 @@ export function deriveViewModel(
     if (id && !hass.states[id]) warnings.push(strings.missingEntity(id));
   }
 
+  const offered = controlEntity?.attributes.preset_modes;
+  if (Array.isArray(offered)) {
+    for (const id of CONTROL_MODES) {
+      const preset = config.preset_modes[id];
+      if (!offered.includes(preset))
+        warnings.push(strings.presetMissing(preset, config.control_entity));
+    }
+  }
+
   // The control entity's own state is never displayed; `unknown` is normal.
   let controlsEnabled = true;
   let controlHint: string | undefined;

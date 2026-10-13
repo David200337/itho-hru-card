@@ -60,7 +60,7 @@ export const styles = css`
     background: var(--secondary-background-color, #e5e5e5);
     border: 1px solid var(--divider-color, #e0e0e0);
     border-radius: var(--ha-card-border-radius, 12px);
-    cursor: default;
+    cursor: pointer;
   }
   button:focus-visible {
     outline: 2px solid var(--primary-color, #03a9f4);
@@ -73,7 +73,12 @@ export const styles = css`
   }
   button[disabled] {
     color: var(--disabled-text-color, #9e9e9e);
+    cursor: default;
   }
+  button.pending {
+    border: 2px dashed var(--primary-color, #03a9f4);
+  }
+  .status,
   .hint,
   .warning {
     font-size: 0.85em;

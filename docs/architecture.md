@@ -189,6 +189,7 @@ timers. The component schedules a single re-render at the timeout moment.
 | Fan value non-numeric             | "—"                                        |
 | Control entity missing/unavailable| Buttons disabled, with a hint             |
 | Control entity `unknown`          | Normal (expected)                          |
+| Configured preset not in the control entity's `preset_modes` | Inline warning naming the preset (case-sensitive) |
 | Configured entity ID not in `hass.states` | Inline warning naming the entity    |
 
 Fan speed units come from `unit_of_measurement`; if the attribute is absent, the card shows the
