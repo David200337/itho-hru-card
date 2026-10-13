@@ -87,7 +87,11 @@ export class IthoHruCard extends LitElement {
 
   private async select(mode: ControlMode): Promise<void> {
     const { config, hass, vm } = this;
-    if (!config || !hass || !vm?.controlsEnabled || this.pending?.mode === mode) return;
+    if (!config || !hass || !vm?.controlsEnabled) return;
+    // Ignore duplicates only while the request is still waiting; after the timeout, resend.
+    const { pending } = this;
+    if (pending?.mode === mode && Date.now() < pending.requestedAt + config.pending_timeout * 1000)
+      return;
     const request: PendingRequest = { mode, requestedAt: Date.now() };
     this.pending = request;
     try {

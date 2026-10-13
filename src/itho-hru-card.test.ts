@@ -189,6 +189,65 @@ describe('mode control', () => {
     expect(hass.callService).toHaveBeenCalledTimes(2);
   });
 
+  it('allows resending the same mode after the timeout and restarts the timer', async () => {
+    const hass = makeHass();
+    const el = await mount(config, hass);
+    buttons(el)[0]!.click();
+    await el.updateComplete;
+    vi.advanceTimersByTime(29_000);
+    buttons(el)[0]!.click();
+    expect(hass.callService).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(1_000);
+    await el.updateComplete;
+    expect(status(el)).toContain('not confirmed');
+
+    buttons(el)[0]!.click();
+    await el.updateComplete;
+    expect(hass.callService).toHaveBeenCalledTimes(2);
+    expect(status(el)).toContain('waiting');
+    expect(status(el)).not.toContain('not confirmed');
+
+    // The new request has its own full timeout.
+    vi.advanceTimersByTime(29_000);
+    await el.updateComplete;
+    expect(status(el)).toContain('waiting');
+    vi.advanceTimersByTime(1_000);
+    await el.updateComplete;
+    expect(status(el)).toContain('not confirmed');
+  });
+
+  it('notifies when a resend after the timeout is rejected', async () => {
+    const hass = makeHass();
+    const el = await mount(config, hass);
+    buttons(el)[0]!.click();
+    await el.updateComplete;
+    vi.advanceTimersByTime(30_000);
+    await el.updateComplete;
+    hass.callService = vi.fn(async () => {
+      throw new Error('nope');
+    });
+    const notified = vi.fn();
+    el.addEventListener('hass-notification', notified);
+    buttons(el)[0]!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    await el.updateComplete;
+    expect(notified).toHaveBeenCalledTimes(1);
+    expect(status(el)).toBeUndefined();
+  });
+
+  it('does not present an already-matching sensor as an acknowledgment', async () => {
+    const hass = makeHass(); // reported mode is already Auto
+    const el = await mount(config, hass);
+    buttons(el)[3]!.click();
+    await el.updateComplete;
+    expect(hass.callService).toHaveBeenCalledTimes(1);
+    // No request or confirmation is shown; the highlight is just the reported mode.
+    expect(status(el)).toBeUndefined();
+    expect(buttons(el)[3]!.classList.contains('pending')).toBe(false);
+    expect(buttons(el)[3]!.getAttribute('aria-pressed')).toBe('true');
+  });
+
   it('clears the request and notifies when the service call is rejected', async () => {
     const hass = makeHass();
     hass.callService = vi.fn(async () => {
