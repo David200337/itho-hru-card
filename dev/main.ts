@@ -37,6 +37,7 @@ card.setConfig({
   control_entity: IDS.control,
   supply_fan_entity: IDS.supply,
   exhaust_fan_entity: IDS.exhaust,
+  pending_timeout: 10,
 });
 document.getElementById('card')!.appendChild(card);
 mock.onChange((hass) => (card.hass = hass));
@@ -52,6 +53,13 @@ const actions: Record<string, () => void> = {
   'Mode entity missing': () => mock.remove(IDS.mode),
   'Control unavailable': () => mock.set(IDS.control, 'unavailable'),
   'Control normal': () => mock.set(IDS.control, 'unknown'),
+  'Device lag: 3 s': () => (mock.lagMs = 3000),
+  'Device lag: 20 s (exceeds 10 s timeout)': () => (mock.lagMs = 20000),
+  'Device never reports': () => (mock.lagMs = undefined),
+  'Service calls reject': () => (mock.rejectCalls = true),
+  'Service calls succeed': () => (mock.rejectCalls = false),
+  'Preset "High" not offered': () =>
+    mock.set(IDS.control, 'unknown', { preset_modes: ['Low', 'Medium', 'Auto'] }),
   'Fan non-numeric': () => mock.set(IDS.supply, 'abc', { unit_of_measurement: 'rpm' }),
   'Fan unavailable': () => mock.set(IDS.exhaust, 'unavailable', { unit_of_measurement: 'rpm' }),
   'Fan speeds change': () => {

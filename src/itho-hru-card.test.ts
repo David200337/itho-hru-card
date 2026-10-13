@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IthoHruCard } from './itho-hru-card';
 import type { HassEntity, HomeAssistant } from './ha-types';
 
@@ -76,15 +76,13 @@ describe('rendering', () => {
     expect(el.shadowRoot!.querySelector('.fans')).toBeNull();
   });
 
-  it('highlights the button of the reported mode and keeps buttons inert', async () => {
+  it('highlights the button of the reported mode', async () => {
     const hass = makeHass();
     const el = await mount(baseConfig, hass);
     const pressed = [...el.shadowRoot!.querySelectorAll('button')].map((b) =>
       b.getAttribute('aria-pressed'),
     );
     expect(pressed).toEqual(['false', 'false', 'false', 'true']);
-    el.shadowRoot!.querySelectorAll('button').forEach((b) => b.click());
-    expect(hass.callService).not.toHaveBeenCalled();
   });
 
   it('follows an external mode change', async () => {
@@ -119,5 +117,171 @@ describe('shouldUpdate', () => {
     };
     await el.updateComplete;
     expect(render).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('mode control', () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] }));
+  afterEach(() => vi.useRealTimers());
+
+  const buttons = (el: IthoHruCard) => [...el.shadowRoot!.querySelectorAll('button')];
+  const status = (el: IthoHruCard) => el.shadowRoot!.querySelector('.status')?.textContent?.trim();
+  const config = { ...baseConfig, pending_timeout: 30 };
+
+  it('calls fan.set_preset_mode with the configured preset', async () => {
+    const hass = makeHass();
+    const el = await mount({ ...config, preset_modes: { high: 'Boost' } }, hass);
+    buttons(el)[2]!.click();
+    expect(hass.callService).toHaveBeenCalledWith('fan', 'set_preset_mode', {
+      entity_id: 'fan.control',
+      preset_mode: 'Boost',
+    });
+  });
+
+  it('shows the request while the reported mode stays highlighted', async () => {
+    const el = await mount(config);
+    buttons(el)[0]!.click();
+    await el.updateComplete;
+    expect(buttons(el)[0]!.classList.contains('pending')).toBe(true);
+    expect(buttons(el).map((b) => b.getAttribute('aria-pressed'))).toEqual([
+      'false',
+      'false',
+      'false',
+      'true',
+    ]);
+    expect(el.shadowRoot!.querySelector('.mode-label')?.textContent).toBe('Auto');
+    expect(status(el)).toContain('waiting');
+  });
+
+  it('clears the request when the device confirms', async () => {
+    const el = await mount(config);
+    buttons(el)[0]!.click();
+    await el.updateComplete;
+    el.hass = makeHass({ 'sensor.mode': entity('sensor.mode', '1') });
+    await el.updateComplete;
+    expect(status(el)).toBeUndefined();
+    expect(buttons(el)[0]!.classList.contains('pending')).toBe(false);
+    expect(buttons(el)[0]!.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('shows "not confirmed" after the timeout without an error', async () => {
+    const hass = makeHass();
+    const el = await mount(config, hass);
+    const notified = vi.fn();
+    el.addEventListener('hass-notification', notified);
+    buttons(el)[0]!.click();
+    await el.updateComplete;
+    vi.advanceTimersByTime(30_000);
+    await el.updateComplete;
+    expect(status(el)).toContain('not confirmed');
+    expect(buttons(el)[0]!.classList.contains('pending')).toBe(true);
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  it('sends no second call for the same pending mode', async () => {
+    const hass = makeHass();
+    const el = await mount(config, hass);
+    buttons(el)[0]!.click();
+    await el.updateComplete;
+    buttons(el)[0]!.click();
+    expect(hass.callService).toHaveBeenCalledTimes(1);
+    buttons(el)[1]!.click();
+    expect(hass.callService).toHaveBeenCalledTimes(2);
+  });
+
+  it('allows resending the same mode after the timeout and restarts the timer', async () => {
+    const hass = makeHass();
+    const el = await mount(config, hass);
+    buttons(el)[0]!.click();
+    await el.updateComplete;
+    vi.advanceTimersByTime(29_000);
+    buttons(el)[0]!.click();
+    expect(hass.callService).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(1_000);
+    await el.updateComplete;
+    expect(status(el)).toContain('not confirmed');
+
+    buttons(el)[0]!.click();
+    await el.updateComplete;
+    expect(hass.callService).toHaveBeenCalledTimes(2);
+    expect(status(el)).toContain('waiting');
+    expect(status(el)).not.toContain('not confirmed');
+
+    // The new request has its own full timeout.
+    vi.advanceTimersByTime(29_000);
+    await el.updateComplete;
+    expect(status(el)).toContain('waiting');
+    vi.advanceTimersByTime(1_000);
+    await el.updateComplete;
+    expect(status(el)).toContain('not confirmed');
+  });
+
+  it('notifies when a resend after the timeout is rejected', async () => {
+    const hass = makeHass();
+    const el = await mount(config, hass);
+    buttons(el)[0]!.click();
+    await el.updateComplete;
+    vi.advanceTimersByTime(30_000);
+    await el.updateComplete;
+    hass.callService = vi.fn(async () => {
+      throw new Error('nope');
+    });
+    const notified = vi.fn();
+    el.addEventListener('hass-notification', notified);
+    buttons(el)[0]!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    await el.updateComplete;
+    expect(notified).toHaveBeenCalledTimes(1);
+    expect(status(el)).toBeUndefined();
+  });
+
+  it('does not present an already-matching sensor as an acknowledgment', async () => {
+    const hass = makeHass(); // reported mode is already Auto
+    const el = await mount(config, hass);
+    buttons(el)[3]!.click();
+    await el.updateComplete;
+    expect(hass.callService).toHaveBeenCalledTimes(1);
+    // No request or confirmation is shown; the highlight is just the reported mode.
+    expect(status(el)).toBeUndefined();
+    expect(buttons(el)[3]!.classList.contains('pending')).toBe(false);
+    expect(buttons(el)[3]!.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('clears the request and notifies when the service call is rejected', async () => {
+    const hass = makeHass();
+    hass.callService = vi.fn(async () => {
+      throw new Error('nope');
+    });
+    const el = await mount(config, hass);
+    const notified = vi.fn();
+    el.addEventListener('hass-notification', notified);
+    buttons(el)[0]!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    await el.updateComplete;
+    expect(status(el)).toBeUndefined();
+    expect(notified).toHaveBeenCalledTimes(1);
+    expect((notified.mock.calls[0]![0] as CustomEvent).detail.message).toContain('Low');
+  });
+
+  it.each(['unavailable', null])(
+    'disables buttons when the control entity is %s',
+    async (state) => {
+      const hass = makeHass();
+      if (state === null) delete hass.states['fan.control'];
+      else hass.states['fan.control'] = entity('fan.control', state);
+      const el = await mount(config, hass);
+      expect(buttons(el).every((b) => b.disabled)).toBe(true);
+      buttons(el)[0]!.click();
+      expect(hass.callService).not.toHaveBeenCalled();
+    },
+  );
+
+  it('warns about a configured preset the entity does not offer', async () => {
+    const hass = makeHass({
+      'fan.control': entity('fan.control', 'unknown', { preset_modes: ['Low', 'Medium', 'Auto'] }),
+    });
+    const el = await mount(config, hass);
+    expect(el.shadowRoot!.querySelector('.warning')?.textContent).toContain('"High"');
   });
 });

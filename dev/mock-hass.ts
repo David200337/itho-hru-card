@@ -1,5 +1,7 @@
 import type { HassEntity, HomeAssistant } from '../src/ha-types';
 
+const PRESET_CODES: Record<string, string> = { Low: '1', Medium: '2', High: '3', Auto: '24' };
+
 export const IDS = {
   mode: 'sensor.hru_350_actual_mode',
   control: 'fan.hru_control',
@@ -16,6 +18,10 @@ const make = (id: string, state: string, attributes: Record<string, unknown> = {
 /** A fake `hass` whose states are replaced immutably, like Home Assistant's. */
 export class MockHass {
   hass: HomeAssistant;
+  /** Milliseconds until the device reports a requested mode; undefined = never reports. */
+  lagMs: number | undefined = 3000;
+  /** When true, service calls are rejected. */
+  rejectCalls = false;
   private listeners: Array<(hass: HomeAssistant) => void> = [];
 
   constructor() {
@@ -29,8 +35,19 @@ export class MockHass {
         [IDS.exhaust]: make(IDS.exhaust, '1100', { unit_of_measurement: 'rpm' }),
         'sensor.unrelated': make('sensor.unrelated', '0'),
       },
-      callService: async () => undefined,
+      callService: (domain, service, data) => this.callService(domain, service, data),
     };
+  }
+
+  private async callService(
+    domain: string,
+    service: string,
+    data?: Record<string, unknown>,
+  ): Promise<void> {
+    console.info('callService', domain, service, data);
+    if (this.rejectCalls) throw new Error('Service call rejected (simulated)');
+    const code = PRESET_CODES[String(data?.preset_mode)];
+    if (this.lagMs !== undefined && code) setTimeout(() => this.set(IDS.mode, code), this.lagMs);
   }
 
   onChange(listener: (hass: HomeAssistant) => void): void {

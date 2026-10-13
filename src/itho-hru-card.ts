@@ -3,7 +3,8 @@ import { validateConfig, type IthoHruCardConfig } from './config';
 import type { HomeAssistant } from './ha-types';
 import { strings } from './strings';
 import { styles } from './styles';
-import { deriveViewModel, type FanView } from './view-model';
+import { deriveViewModel, type FanView, type PendingRequest, type ViewModel } from './view-model';
+import type { ControlMode } from './modes';
 
 declare global {
   interface Window {
@@ -17,10 +18,15 @@ export class IthoHruCard extends LitElement {
   static properties = {
     hass: { attribute: false },
     config: { state: true },
+    pending: { state: true },
   };
 
   hass?: HomeAssistant;
   config?: IthoHruCardConfig;
+  pending?: PendingRequest;
+
+  private vm?: ViewModel;
+  private timeoutTimer?: ReturnType<typeof setTimeout>;
 
   static getStubConfig() {
     return {
@@ -46,11 +52,63 @@ export class IthoHruCard extends LitElement {
   protected shouldUpdate(changed: PropertyValues): boolean {
     if (!this.config || !this.hass) return false;
     const oldHass = changed.get('hass') as HomeAssistant | undefined;
-    if (changed.has('config') || !oldHass) return true;
+    if (changed.has('config') || changed.has('pending') || !oldHass) return true;
     const { mode_entity, control_entity, supply_fan_entity, exhaust_fan_entity } = this.config;
     return [mode_entity, control_entity, supply_fan_entity, exhaust_fan_entity].some(
       (id) => id !== undefined && oldHass.states[id] !== this.hass!.states[id],
     );
+  }
+
+  connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    clearTimeout(this.timeoutTimer);
+  }
+
+  protected willUpdate(): void {
+    if (!this.config || !this.hass) return;
+    const vm = deriveViewModel(this.hass, this.config, this.pending, Date.now());
+    if (vm.clearPending) this.pending = undefined;
+    this.vm = vm;
+
+    // One re-render at the moment a waiting request becomes "not confirmed".
+    clearTimeout(this.timeoutTimer);
+    if (vm.pending?.status === 'waiting') {
+      this.timeoutTimer = setTimeout(
+        () => this.requestUpdate(),
+        Math.max(0, vm.pending.timeoutAt - Date.now()),
+      );
+    }
+  }
+
+  private async select(mode: ControlMode): Promise<void> {
+    const { config, hass, vm } = this;
+    if (!config || !hass || !vm?.controlsEnabled) return;
+    // Ignore duplicates only while the request is still waiting; after the timeout, resend.
+    const { pending } = this;
+    if (pending?.mode === mode && Date.now() < pending.requestedAt + config.pending_timeout * 1000)
+      return;
+    const request: PendingRequest = { mode, requestedAt: Date.now() };
+    this.pending = request;
+    try {
+      await hass.callService('fan', 'set_preset_mode', {
+        entity_id: config.control_entity,
+        preset_mode: config.preset_modes[mode],
+      });
+    } catch {
+      if (this.pending === request) this.pending = undefined;
+      this.dispatchEvent(
+        new CustomEvent('hass-notification', {
+          detail: { message: strings.requestFailed(strings.modeLabels[mode]) },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }
   }
 
   private renderFan(label: string, fan: FanView | undefined) {
@@ -63,7 +121,8 @@ export class IthoHruCard extends LitElement {
 
   render() {
     if (!this.config || !this.hass) return nothing;
-    const vm = deriveViewModel(this.hass, this.config, undefined, Date.now());
+    const vm = this.vm;
+    if (!vm) return nothing;
     return html`<ha-card .header=${vm.title}>
       <div class="content">
         <div class="mode ${vm.mode.kind === 'unavailable' ? 'inactive' : ''}">
@@ -86,14 +145,27 @@ export class IthoHruCard extends LitElement {
             (b) =>
               html`<button
                 type="button"
+                class=${b.pending ? 'pending' : ''}
                 aria-pressed=${b.active ? 'true' : 'false'}
                 ?disabled=${!vm.controlsEnabled}
+                @click=${() => this.select(b.mode)}
               >
                 <ha-icon .icon=${b.icon}></ha-icon>
                 <span>${b.label}</span>
               </button>`,
           )}
         </div>
+        ${
+          vm.pending
+            ? html`<div class="status">
+                ${
+                  vm.pending.status === 'waiting'
+                    ? strings.requestWaiting(strings.modeLabels[vm.pending.mode])
+                    : strings.requestNotConfirmed(strings.modeLabels[vm.pending.mode])
+                }
+              </div>`
+            : nothing
+        }
         ${vm.controlHint ? html`<div class="hint">${vm.controlHint}</div>` : nothing}
         ${vm.warnings.map((w) => html`<div class="warning">${w}</div>`)}
       </div>

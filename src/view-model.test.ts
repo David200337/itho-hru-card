@@ -137,6 +137,34 @@ describe('warnings', () => {
   });
 });
 
+describe('preset warnings', () => {
+  const withPresets = (presets: unknown) =>
+    makeHass({ 'fan.control': entity('fan.control', 'unknown', { preset_modes: presets }) });
+
+  it('is silent when all configured presets are offered', () => {
+    expect(derive(withPresets(['Low', 'Medium', 'High', 'Auto', 'AutoNight'])).warnings).toEqual(
+      [],
+    );
+  });
+
+  it('warns for each configured preset that is not offered', () => {
+    const vm = derive(withPresets(['Low', 'Auto']));
+    expect(vm.warnings).toEqual([
+      'Preset "Medium" is not offered by fan.control',
+      'Preset "High" is not offered by fan.control',
+    ]);
+  });
+
+  it('is case-sensitive', () => {
+    expect(derive(withPresets(['low', 'Medium', 'High', 'Auto'])).warnings).toHaveLength(1);
+  });
+
+  it('is silent when the attribute is absent or not a list', () => {
+    expect(derive().warnings).toEqual([]);
+    expect(derive(withPresets('Low')).warnings).toEqual([]);
+  });
+});
+
 describe('fan rows', () => {
   it('formats value with unit', () => {
     const vm = derive();
