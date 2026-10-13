@@ -406,6 +406,26 @@ export const styles = css`
       transform: translateY(-3px);
     }
   }
+  /* The fan line returns from below, the mirror of the status line arriving from above. */
+  .secondary.enter {
+    animation: fans-in 160ms var(--ease-out);
+  }
+  /* A changed fan value settles in from below, so the eye catches the new number. */
+  .fan-value.changed {
+    animation: value-in 160ms var(--ease-out);
+  }
+  @keyframes value-in {
+    from {
+      opacity: 0;
+      transform: translateY(3px);
+    }
+  }
+  @keyframes fans-in {
+    from {
+      opacity: 0;
+      transform: translateY(3px);
+    }
+  }
   @keyframes note-out {
     to {
       opacity: 0;
@@ -427,8 +447,17 @@ export const styles = css`
       border-right-color: transparent;
     }
     .note,
-    .status-line {
+    .status-line,
+    .secondary.enter {
       animation: none;
+    }
+    .fan-value.changed {
+      animation: value-fade 160ms ease-out;
+    }
+    @keyframes value-fade {
+      from {
+        opacity: 0;
+      }
     }
     .issues-panel,
     .banners,
