@@ -11,5 +11,9 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     include: ['src/**/*.test.ts'],
+    coverage: {
+      include: ['src/modes.ts', 'src/view-model.ts'],
+      thresholds: { branches: 90 },
+    },
   },
 });

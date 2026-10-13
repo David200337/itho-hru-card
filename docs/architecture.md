@@ -106,6 +106,7 @@ src/
   view-model.ts     deriveViewModel(hass, config, pending, now) → plain object. Pure.
   ha-types.ts       Minimal HomeAssistant / HassEntity interfaces.
   styles.ts         Lit css`` using HA theme variables.
+  strings.ts        All user-facing English strings.
 dev/
   index.html, mock-hass.ts   Standalone harness with simulated device.
 ```
