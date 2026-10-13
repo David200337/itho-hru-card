@@ -1,33 +1,7 @@
+import './ha-stubs';
 import '../src/itho-hru-card';
 import type { IthoHruCard } from '../src/itho-hru-card';
 import { IDS, MockHass } from './mock-hass';
-
-// Minimal stand-ins for the HA elements the card uses.
-class HaCard extends HTMLElement {
-  private _header?: string;
-  set header(value: string | undefined) {
-    this._header = value;
-    const h = this.shadowRoot?.querySelector('h1');
-    if (h) h.textContent = value ?? '';
-  }
-  connectedCallback() {
-    this.attachShadow({ mode: 'open' }).innerHTML = `
-      <style>:host{display:block;background:var(--card-background-color);
-      border-radius:var(--ha-card-border-radius);border:1px solid var(--divider-color)}
-      h1{margin:0;padding:16px 16px 0;font-size:1.3em;font-weight:400;color:var(--primary-text-color)}</style>
-      <h1></h1><slot></slot>`;
-    this.header = this._header;
-  }
-}
-class HaIcon extends HTMLElement {
-  icon?: string;
-  connectedCallback() {
-    this.style.display = 'inline-block';
-    this.textContent = '●';
-  }
-}
-customElements.define('ha-card', HaCard);
-customElements.define('ha-icon', HaIcon);
 
 const mock = new MockHass();
 const card = document.createElement('itho-hru-card') as IthoHruCard;

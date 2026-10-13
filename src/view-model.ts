@@ -54,6 +54,8 @@ export interface ViewModel {
   supply?: FanView;
   exhaust?: FanView;
   warnings: string[];
+  /** Display-only: `warnings` with all missing presets merged into a single line. */
+  issues: string[];
 }
 
 function fanView(entity: HassEntity | undefined): FanView {
@@ -108,13 +110,21 @@ export function deriveViewModel(
     if (id && !hass.states[id]) warnings.push(strings.missingEntity(id));
   }
 
+  const issues = [...warnings];
   const offered = controlEntity?.attributes.preset_modes;
   if (Array.isArray(offered)) {
+    const missing: string[] = [];
     for (const id of CONTROL_MODES) {
       const preset = config.preset_modes[id];
-      if (!offered.includes(preset))
+      if (!offered.includes(preset)) {
         warnings.push(strings.presetMissing(preset, config.control_entity));
+        missing.push(preset);
+      }
     }
+    if (missing.length === 1)
+      issues.push(strings.presetMissing(missing[0]!, config.control_entity));
+    else if (missing.length > 1)
+      issues.push(strings.presetsMissing(missing, config.control_entity));
   }
 
   // The control entity's own state is never displayed; `unknown` is normal.
@@ -162,5 +172,6 @@ export function deriveViewModel(
       ? { exhaust: fanView(hass.states[config.exhaust_fan_entity]) }
       : {}),
     warnings,
+    issues,
   };
 }
