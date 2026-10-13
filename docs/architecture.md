@@ -207,6 +207,20 @@ bare number.
 - Icons come from `ha-icon` with `mdi:` names (`mdi:fan-speed-1`, `mdi:fan-speed-2`,
   `mdi:fan-speed-3`, `mdi:fan-auto`).
 
+### Visual design (M5)
+
+The design direction is still to be selected in M5. Once chosen, it is recorded here with its
+rationale and a table mapping each card state to how it looks. Constraints agreed up front:
+
+- Compact by default: 6 columns × at most 3 rows in sections view.
+- Fan speeds as text only, with no bars or gauges.
+- Changes stay in the presentation layer. `view-model.ts` may gain additive, display-only fields
+  but no changes in meaning.
+- Newer HA design variables are used only with fallbacks, because the minimum version is 2024.11.
+- Accessibility target is WCAG 2.2 AA. State is never shown by colour alone, status messages are
+  announced through a polite live region, touch targets are at least 44 px high, and reduced
+  motion is respected.
+
 ## Testing strategy
 
 1. **Unit (Vitest, node):** `modes.ts`, `config.ts`, `view-model.ts`, table-driven.
@@ -214,8 +228,11 @@ bare number.
    `callService` arguments, assign a new `hass` and assert the update.
 3. **Mock harness (`npm run dev`):** fake `hass` with controls for external mode changes,
    unavailability, unknown codes and a simulated device delay. Stubs `ha-card` and `ha-icon`.
-4. **Real Home Assistant:** build into `config/www/` and register `/local/itho-hru-card.js?v=N` as
-   a dashboard resource. Follow the manual checklist in `docs/testing.md` (added in milestone 5).
+4. **Visual gallery (`dev/`, M5):** every card state, in light and dark, at card widths of 280,
+   360, 480 and 600+ px, on one page. Reviewed manually, with no pixel comparison. Reference
+   screenshots live in `docs/images/`.
+5. **Real Home Assistant:** build into `config/www/` and register `/local/itho-hru-card.js?v=N` as
+   a dashboard resource. Follow the manual checklist in `docs/testing.md` (added in milestone 6).
 
 ## Decision log
 
@@ -229,3 +246,7 @@ bare number.
 | Visual editor deferred to v0.2 | Keeps the MVP small |
 | English only in MVP | Strings are kept together to ease later i18n |
 | Minimum HA 2024.11 | `getGridOptions` |
+| Compact default size (6 × ≤3) | Fits alongside other cards in a section; users can still resize |
+| Fan speeds as text only | A bar would need a new option or a hard-coded maximum RPM |
+| Manual visual gallery, no pixel diffing | Avoids a heavy, font-sensitive dev dependency for a small project |
+| Design prototypes stay out of `main` | Only the chosen direction ships; screenshots go in the PR |
